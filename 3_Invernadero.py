@@ -1,4 +1,5 @@
-import csv
+import json
+import os
 
 class SensorTemperatura:
     def __init__(self, temperatura_actual):
@@ -86,26 +87,152 @@ class ControladorInvernadero:
             print("Apagando luz...")
             self.actuador_luz.ajustar_luz(False)
 
-    # Metodo para guardar datos en un archivo CSV
-    def guardar_datos_csv(self, archivo):
-        with open(archivo, mode='a', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow([
-                self.sensor_temperatura.temperatura_actual,
-                self.sensor_humedad.humedad_actual,
-                self.sensor_nutrientes.nivel_actual,
-                'Encendida' if self.actuador_luz.estado_luz else 'Apagada',
-                'Añadiendo' if self.actuador_nutrientes.nutrientes else 'No añadiendo'
-            ])
+        # Retornar un diccionario de estado para almacenar
+        return {
+            "temperatura": self.sensor_temperatura.temperatura_actual,
+            "humedad": self.sensor_humedad.humedad_actual,
+            "nutrientes": self.sensor_nutrientes.nivel_actual,
+            "luz": self.actuador_luz.estado_luz
+        }
 
+
+class ManejoArchivos:
+    def __init__(self, archivo):
+        self.archivo = archivo
+        # Crear archivo si no existe
+        if not os.path.exists(self.archivo):
+            with open(self.archivo, 'w') as f:
+                json.dump([], f)
+
+    def alta(self, datos):
+        # Cargar los datos existentes
+        with open(self.archivo, 'r') as f:
+            registros = json.load(f)
+        # Añadir nuevos datos
+        registros.append(datos)
+        # Guardar los cambios
+        with open(self.archivo, 'w') as f:
+            json.dump(registros, f, indent=4)
+
+    def baja(self, indice):
+        # Cargar los datos existentes
+        with open(self.archivo, 'r') as f:
+            registros = json.load(f)
+        # Eliminar por índice
+        if 0 <= indice < len(registros):
+            registros.pop(indice)
+        # Guardar los cambios
+        with open(self.archivo, 'w') as f:
+            json.dump(registros, f, indent=4)
+
+    def modificar(self, indice, nuevos_datos):
+        # Cargar los datos existentes
+        with open(self.archivo, 'r') as f:
+            registros = json.load(f)
+        # Modificar el registro por índice
+        if 0 <= indice < len(registros):
+            registros[indice] = nuevos_datos
+        # Guardar los cambios
+        with open(self.archivo, 'w') as f:
+            json.dump(registros, f, indent=4)
+
+    def consultar(self):
+        # Cargar los datos existentes
+        with open(self.archivo, 'r') as f:
+            registros = json.load(f)
+        return registros
+
+
+def mostrar_menu():
+    print("\nMenú del Invernadero Automatizado:")
+    print("1. Alta (Guardar nueva configuración)")
+    print("2. Baja (Eliminar una configuración por índice)")
+    print("3. Modificación (Modificar una configuración por índice)")
+    print("4. Consultas (Mostrar todas las configuraciones guardadas)")
+    print("5. Salir")
+    return input("Seleccione una opción: ")
+
+
+def main():
+    invernadero = ControladorInvernadero()
+    archivo = ManejoArchivos("variables.json")
+
+    while True:
+        opcion = mostrar_menu()
+
+        if opcion == "1":  # Alta
+            try:
+                temp = float(input("Temperatura: "))
+                hum = float(input("Porcentaje de Humedad: "))
+                nut = float(input("Nutrientes (pH): "))
+                luz = input("Luz (encender/apagar): ").lower() == "encender"
+
+                # Actualizar invernadero manualmente
+                invernadero.sensor_temperatura.actualizar_temperatura(temp)
+                invernadero.sensor_humedad.actualizar_humedad(hum)
+                invernadero.sensor_nutrientes.actualizar_nivel(nut)
+                invernadero.actuador_luz.ajustar_luz(luz)
+
+                # Guardar estado
+                archivo.alta(invernadero.controlar())
+                print("Configuración guardada exitosamente.")
+            except ValueError:
+                print("Error: Por favor ingrese valores numéricos válidos.")
+
+        elif opcion == "2":  # Baja
+            try:
+                indice = int(input("Ingrese el índice de la configuración que desea eliminar: "))
+                archivo.baja(indice)
+                print("Configuración eliminada exitosamente.")
+            except ValueError:
+                print("Error: Ingrese un índice válido.")
+            except IndexError:
+                print("Error: Índice fuera de rango.")
+
+        elif opcion == "3":  # Modificación
+            try:
+                indice = int(input("Ingrese el índice de la configuración que desea modificar: "))
+                temp = float(input("Nueva temperatura: "))
+                hum = float(input("Nuevo porcentaje de humedad: "))
+                nut = float(input("Nuevo nivel de nutrientes (pH): "))
+                luz = input("Luz (encender/apagar): ").lower() == "encender"
+
+                # Actualizar invernadero manualmente
+                invernadero.sensor_temperatura.actualizar_temperatura(temp)
+                invernadero.sensor_humedad.actualizar_humedad(hum)
+                invernadero.sensor_nutrientes.actualizar_nivel(nut)
+                invernadero.actuador_luz.ajustar_luz(luz)
+
+                # Modificar estado
+                archivo.modificar(indice, invernadero.controlar())
+                print("Configuración modificada exitosamente.")
+            except ValueError:
+                print("Error: Ingrese valores numéricos válidos.")
+            except IndexError:
+                print("Error: Índice fuera de rango.")
+        
+        elif opcion == "4":  # Consultas
+            configuraciones = archivo.consultar()
+            if configuraciones:
+                for i, config in enumerate(configuraciones):
+                    print(f"Configuración {i}: Temperatura={config['temperatura']}°C, Humedad={config['humedad']}%, "
+                          f"Nutrientes={config['nutrientes']} pH, Luz={'Encendida' if config['luz'] else 'Apagada'}")
+            else:
+                print("No hay configuraciones guardadas.")
+        
+        elif opcion == "5":  # Salir
+            print("Saliendo del programa.")
+            break
+
+        else:
+            print("Opción no válida. Por favor seleccione una opción del menú.")
+
+
+if __name__ == "__main__":
+    main()
 
 controlador = ControladorInvernadero()
 
-# Crear el archivo CSV con los encabezados
-archivo_csv = 'datos_invernadero.csv'
-with open(archivo_csv, mode='w', newline='') as file:
-    writer = csv.writer(file)
-    writer.writerow(['Temperatura (°C)', 'Humedad (%)', 'Nutrientes (pH)', 'Luz', 'Nutrientes (Estado)'])
 
 # Simulando el monitoreo y control en un bucle
 for i in range(10):
@@ -117,6 +244,3 @@ for i in range(10):
     
     # Ejecutar el controlador
     controlador.controlar()
-
-    # Guardar los datos en el archivo CSV
-    controlador.guardar_datos_csv(archivo_csv)
